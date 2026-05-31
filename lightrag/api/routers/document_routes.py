@@ -6,14 +6,14 @@ import asyncio
 import re
 import shutil
 import time
-from uuid import uuid4
-from lightrag.utils import logger, get_pinyin_sort_key, performance_timing_log
-import aiofiles
 import traceback
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Literal
 from io import BytesIO
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
+from uuid import uuid4
+
+import aiofiles
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -26,12 +26,13 @@ from fastapi import (
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from lightrag import LightRAG
+from lightrag.api.utils_api import get_combined_auth_dependency
 from lightrag.base import DeletionResult, DocProcessingStatus, DocStatus
 from lightrag.constants import (
     FULL_DOCS_FORMAT_PENDING_PARSE,
-    PARSER_ENGINE_LEGACY,
     PARSED_ARTIFACT_DIR_SUFFIXES,
     PARSED_DIR_NAME,
+    PARSER_ENGINE_LEGACY,
     PROCESS_OPTION_CHUNK_FIXED,
     PROCESS_OPTION_CHUNK_PARAGRAH,
     PROCESS_OPTION_CHUNK_RECURSIVE,
@@ -47,9 +48,12 @@ from lightrag.parser.routing import (
 )
 from lightrag.utils import (
     generate_track_id,
+    get_pinyin_sort_key,
+    logger,
     move_file_to_parsed_dir,
+    performance_timing_log,
 )
-from lightrag.api.utils_api import get_combined_auth_dependency
+
 from ..config import global_args
 
 
@@ -3807,9 +3811,9 @@ def create_document_routes(
         try:
             rag = await create_rag(raw_request)
             from lightrag.kg.shared_storage import (
+                get_all_update_flags_status,
                 get_namespace_data,
                 get_namespace_lock,
-                get_all_update_flags_status,
             )
 
             pipeline_status = await get_namespace_data(
