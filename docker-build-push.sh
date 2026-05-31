@@ -2,18 +2,14 @@
 set -e
 
 # Configuration
-IMAGE_NAME="ghcr.io/hkuds/lightrag"
-DOCKERFILE="Dockerfile"
-TAG="latest"
-
-# Get version from git tags
-VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev")
+IMAGE_NAME="sillydong/lightrag"
+DOCKERFILE="Dockerfile.essential"
+TAG="2af88d1-essential"
 
 echo "=================================="
 echo "  Multi-Architecture Docker Build"
 echo "=================================="
 echo "Image: ${IMAGE_NAME}:${TAG}"
-echo "Version: ${VERSION}"
 echo "Platforms: linux/amd64, linux/arm64"
 echo "=================================="
 echo ""
@@ -54,7 +50,6 @@ docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --file ${DOCKERFILE} \
   --tag ${IMAGE_NAME}:${TAG} \
-  --tag ${IMAGE_NAME}:${VERSION} \
   --push \
   .
 
@@ -63,7 +58,6 @@ echo "✓ Build and push complete!"
 echo ""
 echo "Images pushed:"
 echo "  - ${IMAGE_NAME}:${TAG}"
-echo "  - ${IMAGE_NAME}:${VERSION}"
 echo ""
 echo "Verifying multi-architecture manifest..."
 echo ""
