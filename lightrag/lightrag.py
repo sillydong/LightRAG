@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import traceback
 import asyncio
 import os
 import time
+import traceback
 import warnings
 from copy import deepcopy
 
@@ -19,123 +19,86 @@ from typing import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Dict,
     Iterator,
-    cast,
-    final,
+    List,
     Literal,
     Mapping,
     Optional,
-    List,
-    Dict,
     Union,
-)
-from lightrag.prompt import (
-    PROMPTS,
-    get_default_entity_extraction_prompt_profile,
-    resolve_entity_extraction_prompt_profile,
-    validate_entity_extraction_prompt_profile_for_mode,
-)
-from lightrag.constants import (
-    DEFAULT_CHUNK_P_SIZE,
-    DEFAULT_MAX_GLEANING,
-    DEFAULT_MAX_EXTRACTION_RECORDS,
-    DEFAULT_MAX_EXTRACTION_ENTITIES,
-    DEFAULT_FORCE_LLM_SUMMARY_ON_MERGE,
-    DEFAULT_TOP_K,
-    DEFAULT_CHUNK_TOP_K,
-    DEFAULT_MAX_ENTITY_TOKENS,
-    DEFAULT_MAX_RELATION_TOKENS,
-    DEFAULT_MAX_TOTAL_TOKENS,
-    DEFAULT_COSINE_THRESHOLD,
-    DEFAULT_RELATED_CHUNK_NUMBER,
-    DEFAULT_KG_CHUNK_PICK_METHOD,
-    DEFAULT_MIN_RERANK_SCORE,
-    DEFAULT_SUMMARY_MAX_TOKENS,
-    DEFAULT_SUMMARY_CONTEXT_SIZE,
-    DEFAULT_SUMMARY_LENGTH_RECOMMENDED,
-    DEFAULT_MAX_ASYNC,
-    DEFAULT_MAX_PARALLEL_INSERT,
-    DEFAULT_MAX_GRAPH_NODES,
-    DEFAULT_MAX_SOURCE_IDS_PER_ENTITY,
-    DEFAULT_MAX_SOURCE_IDS_PER_RELATION,
-    DEFAULT_SUMMARY_LANGUAGE,
-    DEFAULT_LLM_TIMEOUT,
-    DEFAULT_EMBEDDING_TIMEOUT,
-    DEFAULT_RERANK_TIMEOUT,
-    DEFAULT_SOURCE_IDS_LIMIT_METHOD,
-    DEFAULT_MAX_FILE_PATHS,
-    DEFAULT_MAX_PARALLEL_ANALYZE,
-    DEFAULT_MAX_PARALLEL_PARSE_NATIVE,
-    DEFAULT_MAX_PARALLEL_PARSE_MINERU,
-    DEFAULT_MAX_PARALLEL_PARSE_DOCLING,
-    DEFAULT_QUEUE_SIZE_DEFAULT,
-    DEFAULT_QUEUE_SIZE_INSERT,
-    DEFAULT_FILE_PATH_MORE_PLACEHOLDER,
-)
-from lightrag.utils import get_env_value
-
-from lightrag.kg import (
-    verify_storage_implementation,
+    cast,
+    final,
 )
 
+from dotenv import load_dotenv
 
-from lightrag.kg.shared_storage import (
-    get_namespace_data,
-    get_default_workspace,
-    set_default_workspace,
-    get_namespace_lock,
-    get_storage_keyed_lock,
+from lightrag.addon_params import (
+    ObservableAddonParams,
+    normalize_addon_params,
 )
-
 from lightrag.base import (
     BaseGraphStorage,
     BaseKVStorage,
     BaseVectorStorage,
+    DeletionResult,
     DocProcessingStatus,
     DocStatus,
     DocStatusStorage,
+    OllamaServerInfos,
     QueryParam,
+    QueryResult,
     StorageNameSpace,
     StoragesStatus,
-    DeletionResult,
-    OllamaServerInfos,
-    QueryResult,
 )
-from lightrag.namespace import NameSpace
 from lightrag.chunker import chunking_by_token_size
-from lightrag.operate import (
-    extract_entities,
-    kg_query,
-    naive_query,
-    rebuild_knowledge_from_chunks,
+from lightrag.constants import (
+    DEFAULT_CHUNK_P_SIZE,
+    DEFAULT_CHUNK_TOP_K,
+    DEFAULT_COSINE_THRESHOLD,
+    DEFAULT_EMBEDDING_TIMEOUT,
+    DEFAULT_FILE_PATH_MORE_PLACEHOLDER,
+    DEFAULT_FORCE_LLM_SUMMARY_ON_MERGE,
+    DEFAULT_KG_CHUNK_PICK_METHOD,
+    DEFAULT_LLM_TIMEOUT,
+    DEFAULT_MAX_ASYNC,
+    DEFAULT_MAX_ENTITY_TOKENS,
+    DEFAULT_MAX_EXTRACTION_ENTITIES,
+    DEFAULT_MAX_EXTRACTION_RECORDS,
+    DEFAULT_MAX_FILE_PATHS,
+    DEFAULT_MAX_GLEANING,
+    DEFAULT_MAX_GRAPH_NODES,
+    DEFAULT_MAX_PARALLEL_ANALYZE,
+    DEFAULT_MAX_PARALLEL_INSERT,
+    DEFAULT_MAX_PARALLEL_PARSE_DOCLING,
+    DEFAULT_MAX_PARALLEL_PARSE_MINERU,
+    DEFAULT_MAX_PARALLEL_PARSE_NATIVE,
+    DEFAULT_MAX_RELATION_TOKENS,
+    DEFAULT_MAX_SOURCE_IDS_PER_ENTITY,
+    DEFAULT_MAX_SOURCE_IDS_PER_RELATION,
+    DEFAULT_MAX_TOTAL_TOKENS,
+    DEFAULT_MIN_RERANK_SCORE,
+    DEFAULT_QUEUE_SIZE_DEFAULT,
+    DEFAULT_QUEUE_SIZE_INSERT,
+    DEFAULT_RELATED_CHUNK_NUMBER,
+    DEFAULT_RERANK_TIMEOUT,
+    DEFAULT_SOURCE_IDS_LIMIT_METHOD,
+    DEFAULT_SUMMARY_CONTEXT_SIZE,
+    DEFAULT_SUMMARY_LANGUAGE,
+    DEFAULT_SUMMARY_LENGTH_RECOMMENDED,
+    DEFAULT_SUMMARY_MAX_TOKENS,
+    DEFAULT_TOP_K,
+    GRAPH_FIELD_SEP,
 )
-from lightrag.utils_pipeline import normalize_document_file_path
-from lightrag.constants import GRAPH_FIELD_SEP
-from lightrag.utils import (
-    Tokenizer,
-    TiktokenTokenizer,
-    EmbeddingFunc,
-    always_get_an_event_loop,
-    compute_mdhash_id,
-    priority_limit_async_func_call,
-    sanitize_text_for_encoding,
-    check_storage_env_vars,
-    generate_track_id,
-    convert_to_user_format,
-    logger,
-    make_relation_vdb_ids,
-    subtract_source_ids,
-    make_relation_chunk_key,
-    normalize_source_ids_limit_method,
-    normalize_string_list,
+from lightrag.kg import (
+    verify_storage_implementation,
 )
-from lightrag.types import KnowledgeGraph
-from dotenv import load_dotenv
-from lightrag.pipeline import _PipelineMixin
 from lightrag.kg.factory import get_storage_class
-from lightrag.addon_params import (
-    ObservableAddonParams,
-    normalize_addon_params,
+from lightrag.kg.shared_storage import (
+    get_default_workspace,
+    get_namespace_data,
+    get_namespace_lock,
+    get_storage_keyed_lock,
+    set_default_workspace,
 )
 from lightrag.llm_roles import (
     ROLE_NAMES,
@@ -146,7 +109,42 @@ from lightrag.llm_roles import (
     _RoleLLMMixin,
     _RoleLLMState,
 )
+from lightrag.namespace import NameSpace
+from lightrag.operate import (
+    extract_entities,
+    kg_query,
+    naive_query,
+    rebuild_knowledge_from_chunks,
+)
+from lightrag.pipeline import _PipelineMixin
+from lightrag.prompt import (
+    PROMPTS,
+    get_default_entity_extraction_prompt_profile,
+    resolve_entity_extraction_prompt_profile,
+    validate_entity_extraction_prompt_profile_for_mode,
+)
 from lightrag.storage_migrations import _StorageMigrationMixin
+from lightrag.types import KnowledgeGraph
+from lightrag.utils import (
+    EmbeddingFunc,
+    TiktokenTokenizer,
+    Tokenizer,
+    always_get_an_event_loop,
+    check_storage_env_vars,
+    compute_mdhash_id,
+    convert_to_user_format,
+    generate_track_id,
+    get_env_value,
+    logger,
+    make_relation_chunk_key,
+    make_relation_vdb_ids,
+    normalize_source_ids_limit_method,
+    normalize_string_list,
+    priority_limit_async_func_call,
+    sanitize_text_for_encoding,
+    subtract_source_ids,
+)
+from lightrag.utils_pipeline import normalize_document_file_path
 
 # use the .env that is inside the current folder
 # allows to use different .env file for each lightrag instance
@@ -3676,13 +3674,13 @@ class LightRAG(_RoleLLMMixin, _StorageMigrationMixin, _PipelineMixin):
                     elif original_exception is None:
                         # Deletion stages were in-flight but the try-block return was never
                         # reached; treat the persistence failure as the primary error.
-                        return DeletionResult(
-                            status="fail",
-                            doc_id=doc_id,
-                            message=f"Deletion completed but failed to persist changes: {persistence_error}",
-                            status_code=500,
-                            file_path=file_path,
-                        )
+                        # NOTE: raise instead of return to avoid SyntaxWarning for
+                        # 'return' in a 'finally' block. This branch is logically
+                        # unreachable in practice: deletion_fully_completed=False implies
+                        # an exception was raised and caught, setting original_exception.
+                        raise Exception(
+                            f"Deletion completed but failed to persist changes: {persistence_error}"
+                        ) from persistence_error
                     # If there was an original exception, log the persistence error but
                     # don't override it — the original error result was already returned.
             else:

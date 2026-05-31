@@ -2369,6 +2369,54 @@ def create_app(args):
             logger.error(f"Error getting health status: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
 
+    @app.get(
+        "/workspaces",
+        dependencies=[Depends(combined_auth)],
+        summary="List available workspaces",
+        description="Returns all known workspaces discoverable from the working directory and active cache",
+    )
+    async def list_workspaces(request: Request):
+        """List all available workspaces"""
+        try:
+            current = get_workspace_from_request(request, get_default_workspace())
+            workspaces: set[str] = set()
+
+            # Always include the server default workspace
+            workspaces.add(args.workspace or "")
+
+            # Include all currently cached (active) workspaces
+            workspaces.update(rag_cache.keys())
+            workspaces.update(doc_manager_cache.keys())
+
+            # For file-based storage: scan working_dir subdirectories
+            # A subdirectory is treated as a workspace if it contains at least
+            # one LightRAG storage file (kv_store_*.json or *.graphml).
+            working_dir = Path(args.working_dir)
+            if working_dir.exists():
+                for entry in working_dir.iterdir():
+                    if not entry.is_dir():
+                        continue
+                    # Validate directory name matches allowed workspace characters
+                    sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", entry.name)
+                    if sanitized != entry.name:
+                        continue
+                    has_storage = (
+                        any(entry.glob("kv_store_*.json"))
+                        or any(entry.glob("*.graphml"))
+                        or any(entry.glob("*.faiss"))
+                    )
+                    if has_storage:
+                        workspaces.add(entry.name)
+
+            return {
+                "workspaces": sorted(workspaces),
+                "current": current,
+                "default": args.workspace or "",
+            }
+        except Exception as e:
+            logger.error(f"Error listing workspaces: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+
     # Pre-render the runtime-config <script> once. The browser-visible URL
     # prefixes are NOT baked into the bundle anymore — index.html ships with
     # a placeholder comment that we replace with this snippet on every HTML

@@ -7,11 +7,10 @@ import { useAuthStore } from '@/stores/state'
 import { cn } from '@/lib/utils'
 import { useTranslation } from 'react-i18next'
 import { navigationService } from '@/services/navigation'
-import { ZapIcon, LogOutIcon, CheckIcon } from 'lucide-react'
+import { ZapIcon, LogOutIcon } from 'lucide-react'
 import GithubIcon from '@/components/icons/GithubIcon'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/Tooltip'
-import { useState, useEffect } from 'react'
-import { toast } from 'sonner'
+import WorkspaceSelector from '@/features/WorkspaceSelector'
 
 interface NavigationTabProps {
   value: string
@@ -60,24 +59,6 @@ function TabsNavigation() {
 export default function SiteHeader() {
   const { t } = useTranslation()
   const { isGuestMode, coreVersion, apiVersion, username, webuiTitle, webuiDescription } = useAuthStore()
-  const [workspace, setWorkspace] = useState('')
-
-  useEffect(() => {
-    const ws = localStorage.getItem('LIGHTRAG-WORKSPACE') || ''
-    setWorkspace(ws)
-  }, [])
-
-  const handleWorkspaceUpdate = () => {
-    if (workspace) {
-      localStorage.setItem('LIGHTRAG-WORKSPACE', workspace)
-    } else {
-      localStorage.removeItem('LIGHTRAG-WORKSPACE')
-    }
-    toast.success(t('header.workspaceUpdated', 'Workspace updated'))
-    setTimeout(() => {
-      window.location.reload()
-    }, 500)
-  }
 
   const versionDisplay = (coreVersion && apiVersion)
     ? `${coreVersion}/${apiVersion}`
@@ -132,22 +113,7 @@ export default function SiteHeader() {
 
       <nav className="w-[200px] flex items-center justify-end">
         <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={workspace}
-            onChange={(e) => setWorkspace(e.target.value)}
-            placeholder={t('header.workspace', 'Workspace')}
-            className="h-6 w-24 rounded border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            side="bottom"
-            tooltip={t('header.applyWorkspace', 'Apply Workspace')}
-            onClick={handleWorkspaceUpdate}
-          >
-            <CheckIcon className="size-4" aria-hidden="true" />
-          </Button>
+          <WorkspaceSelector />
           {versionDisplay && (
             <TooltipProvider>
               <Tooltip>

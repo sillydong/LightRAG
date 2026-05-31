@@ -316,6 +316,12 @@ export type StatusCountsResponse = {
   status_counts: Record<string, number>
 }
 
+export type WorkspacesResponse = {
+  workspaces: string[]
+  current: string
+  default: string
+}
+
 export type AuthStatusResponse = {
   auth_configured: boolean
   access_token?: string
@@ -569,6 +575,11 @@ export const checkHealth = async (): Promise<
       message: errorMessage(error)
     }
   }
+}
+
+export const getWorkspaces = async (): Promise<WorkspacesResponse> => {
+  const response = await axiosInstance.get('/workspaces')
+  return response.data
 }
 
 export const getDocuments = async (): Promise<DocsStatusesResponse> => {
