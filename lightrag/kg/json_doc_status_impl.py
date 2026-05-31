@@ -549,3 +549,34 @@ class JsonDocStatusStorage(DocStatusStorage):
         except Exception as e:
             logger.error(f"[{self.workspace}] Error dropping {self.namespace}: {e}")
             return {"status": "error", "message": str(e)}
+
+    async def list_workspaces(self) -> list[str]:
+        """Scan working_dir for workspace subdirectories and the root workspace.
+
+        A directory is considered a valid named workspace if:
+          - Its name matches ``[a-zA-Z0-9_]+`` (same rules as the API endpoint).
+          - The subdirectory itself exists (regardless of whether any documents
+            have been inserted yet).
+
+        The root workspace (``""``) is always included when ``working_dir``
+        itself exists, as it is the implicit default workspace.
+        """
+        import re
+        from pathlib import Path
+
+        working_dir = Path(self.global_config["working_dir"])
+        if not working_dir.exists():
+            return []
+
+        workspaces: list[str] = [""]
+
+        # Named workspaces: any valid-name subdirectory
+        _valid_name = re.compile(r"^[a-zA-Z0-9_]+$")
+        for entry in sorted(working_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            if not _valid_name.match(entry.name):
+                continue
+            workspaces.append(entry.name)
+
+        return workspaces

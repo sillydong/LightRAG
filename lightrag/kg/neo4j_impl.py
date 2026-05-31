@@ -282,6 +282,19 @@ class Neo4JStorage(BaseGraphStorage):
                     await self._create_fulltext_index(
                         self._driver, self._DATABASE, workspace_label
                     )
+
+                    # Register this workspace in the LightRAG workspace registry.
+                    # Uses MERGE so the operation is idempotent.
+                    try:
+                        async with self._driver.session(database=database) as reg_session:
+                            await reg_session.run(
+                                "MERGE (:__LightRAGWorkspace__ {name: $name})",
+                                {"name": self.workspace},
+                            )
+                    except Exception as reg_err:
+                        logger.warning(
+                            f"[{self.workspace}] Failed to register workspace: {reg_err}"
+                        )
                     break
 
     async def _create_fulltext_index(
@@ -2008,12 +2021,49 @@ class Neo4JStorage(BaseGraphStorage):
                 # logger.debug(
                 #     f"[{self.workspace}] Process {os.getpid()} drop Neo4j workspace '{workspace_label}' in database {self._DATABASE}"
                 # )
-                return {
-                    "status": "success",
-                    "message": f"workspace '{workspace_label}' data dropped",
-                }
+
+            # Remove the workspace from the registry
+            try:
+                async with self._driver.session(database=self._DATABASE) as reg_session:
+                    await reg_session.run(
+                        "MATCH (n:__LightRAGWorkspace__ {name: $name}) DELETE n",
+                        {"name": self.workspace},
+                    )
+            except Exception as reg_err:
+                logger.warning(
+                    f"[{self.workspace}] Failed to deregister workspace: {reg_err}"
+                )
+
+            return {
+                "status": "success",
+                "message": f"workspace '{workspace_label}' data dropped",
+            }
         except Exception as e:
             logger.error(
                 f"[{self.workspace}] Error dropping Neo4j workspace '{workspace_label}' in database {self._DATABASE}: {e}"
             )
             return {"status": "error", "message": str(e)}
+
+    async def list_workspaces(self) -> list[str]:
+        """Return all LightRAG workspaces recorded in the registry node.
+
+        Uses a dedicated label ``__LightRAGWorkspace__`` to avoid conflating
+        user-defined Neo4j labels with LightRAG workspace labels.
+        Registry nodes are created by ``initialize`` and removed by ``drop``.
+
+        Returns [] when the driver is not yet initialised.
+        """
+        if self._driver is None:
+            return []
+        query = (
+            "MATCH (n:__LightRAGWorkspace__) RETURN n.name AS name ORDER BY name"
+        )
+        try:
+            async with self._driver.session(database=self._DATABASE) as session:
+                result = await session.run(query)
+                records = await result.data()
+                await result.consume()
+            return [r["name"] for r in records if r.get("name") is not None]
+        except Exception as e:
+            logger.warning(f"[{self.workspace}] list_workspaces Neo4j query failed: {e}")
+            return []

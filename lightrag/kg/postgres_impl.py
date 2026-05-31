@@ -4971,6 +4971,25 @@ class PGDocStatusStorage(DocStatusStorage):
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    async def list_workspaces(self) -> list[str]:
+        """Return all workspaces present in LIGHTRAG_DOC_STATUS via SELECT DISTINCT.
+
+        Safe to call from any instance regardless of its own workspace because the
+        query is not filtered by workspace.  Returns [] if the DB connection is not
+        yet initialised.
+        """
+        if self.db is None:
+            return []
+        sql = "SELECT DISTINCT workspace FROM LIGHTRAG_DOC_STATUS ORDER BY workspace"
+        try:
+            rows = await self.db.query(sql, [], multirows=True)
+            if not rows:
+                return []
+            return [r["workspace"] for r in rows]
+        except Exception as e:
+            logger.warning(f"[list_workspaces] PG query failed: {e}")
+            return []
+
 
 class PGGraphQueryException(Exception):
     """Exception for the AGE queries."""

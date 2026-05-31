@@ -1529,6 +1529,40 @@ class OpenSearchDocStatusStorage(DocStatusStorage):
             )
             return {"status": "error", "message": str(e)}
 
+    async def list_workspaces(self) -> list[str]:
+        """Return all workspaces by scanning OpenSearch index names.
+
+        Queries ``client.indices.get`` with a wildcard for indices whose name
+        contains the sanitized doc_status namespace string.  Extracts the
+        workspace prefix by stripping the ``_{namespace}`` suffix.
+
+        Returns [] when the client is not yet initialised.
+        """
+        if self.client is None:
+            return []
+
+        sanitized_ns = _sanitize_index_name(self.namespace)   # e.g. "doc_status"
+        suffix = f"_{sanitized_ns}"                            # e.g. "_doc_status"
+        pattern = f"*{sanitized_ns}*"
+
+        try:
+            indices: dict = await self.client.indices.get(index=pattern)
+        except Exception as e:
+            logger.warning(f"[list_workspaces] OpenSearch indices.get failed: {e}")
+            return []
+
+        workspaces: list[str] = []
+        for index_name in indices:
+            if index_name == sanitized_ns:
+                # Root workspace
+                workspaces.append("")
+            elif index_name.endswith(suffix):
+                ws = index_name[: -len(suffix)]
+                if ws:
+                    workspaces.append(ws)
+
+        return sorted(workspaces)
+
 
 @final
 @dataclass

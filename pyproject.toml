@@ -127,6 +127,12 @@ offline-llm = [
     "google-genai>=1.0.0,<3.0.0",
 ]
 
+offline-essential = [
+    "asyncpg>=0.31.0,<1.0.0",
+    "pgvector>=0.4.2,<1.0.0",
+    "openai>=2.0.0,<3.0.0",
+]
+
 offline = [
     # Complete offline package (includes api for document processing, plus storage and LLM)
     "lightrag-hku[api,offline-storage,offline-llm]",

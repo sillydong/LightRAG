@@ -17,7 +17,14 @@
     "themeToggle": {
       "switchToLight": "Switch to light theme",
       "switchToDark": "Switch to dark theme"
-    }
+    },
+    "switchWorkspace": "Switch Workspace",
+    "workspacePlaceholder": "Search or create...",
+    "workspaceInvalidChars": "Only letters, numbers and _ allowed",
+    "workspaceSwitched": "Workspace switched",
+    "defaultWorkspace": "default",
+    "createWorkspace": "Create",
+    "noWorkspaces": "No workspaces found"
   },
   "login": {
     "description": "Please enter your account and password to log in to the system",

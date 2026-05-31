@@ -17,7 +17,14 @@
     "themeToggle": {
       "switchToLight": "切换到浅色主题",
       "switchToDark": "切换到深色主题"
-    }
+    },
+    "switchWorkspace": "切换工作区",
+    "workspacePlaceholder": "搜索或创建...",
+    "workspaceInvalidChars": "只允许字母、数字和下划线",
+    "workspaceSwitched": "工作区已切换",
+    "defaultWorkspace": "默认",
+    "createWorkspace": "创建",
+    "noWorkspaces": "未找到工作区"
   },
   "login": {
     "description": "请输入您的账号和密码登录系统",

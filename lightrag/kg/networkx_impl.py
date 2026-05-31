@@ -787,3 +787,35 @@ class NetworkXStorage(BaseGraphStorage):
                 f"[{self.workspace}] Error dropping graph file:{self._graphml_xml_file}: {e}"
             )
             return {"status": "error", "message": str(e)}
+
+    async def list_workspaces(self) -> list[str]:
+        """Scan working_dir for workspace directories containing a GraphML file.
+
+        Used as a fallback by ``LightRAG.list_workspaces`` when the doc_status
+        storage returns an empty list (e.g. workspace initialised but no docs
+        inserted yet).
+        """
+        import re
+        from pathlib import Path
+
+        working_dir = Path(self.global_config["working_dir"])
+        if not working_dir.exists():
+            return []
+
+        workspaces: list[str] = []
+        sentinel = f"graph_{self.namespace}.graphml"
+
+        # Root workspace
+        if (working_dir / sentinel).exists():
+            workspaces.append("")
+
+        _valid_name = re.compile(r"^[a-zA-Z0-9_]+$")
+        for entry in sorted(working_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            if not _valid_name.match(entry.name):
+                continue
+            if (entry / sentinel).exists():
+                workspaces.append(entry.name)
+
+        return workspaces

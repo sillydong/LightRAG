@@ -110,6 +110,16 @@ class MemgraphStorage(BaseGraphStorage):
                         logger.warning(
                             f"[{self.workspace}] Index creation on :{workspace_label}(entity_id) may have failed or already exists: {e}"
                         )
+                    # Register this workspace in the LightRAG workspace registry.
+                    try:
+                        await session.run(
+                            "MERGE (:__LightRAGWorkspace__ {name: $name})",
+                            {"name": self.workspace},
+                        )
+                    except Exception as reg_err:
+                        logger.warning(
+                            f"[{self.workspace}] Failed to register workspace: {reg_err}"
+                        )
                     await session.run("RETURN 1")
                     logger.info(f"[{self.workspace}] Connected to Memgraph at {URI}")
             except Exception as e:
@@ -976,12 +986,46 @@ class MemgraphStorage(BaseGraphStorage):
                 logger.info(
                     f"[{self.workspace}] Dropped workspace {workspace_label} from Memgraph database {self._DATABASE}"
                 )
-                return {"status": "success", "message": "workspace data dropped"}
+
+            # Remove the workspace from the registry
+            try:
+                async with self._driver.session() as reg_session:
+                    await reg_session.run(
+                        "MATCH (n:__LightRAGWorkspace__ {name: $name}) DELETE n",
+                        {"name": self.workspace},
+                    )
+            except Exception as reg_err:
+                logger.warning(
+                    f"[{self.workspace}] Failed to deregister workspace: {reg_err}"
+                )
+
+            return {"status": "success", "message": "workspace data dropped"}
         except Exception as e:
             logger.error(
                 f"[{self.workspace}] Error dropping workspace {workspace_label} from Memgraph database {self._DATABASE}: {e}"
             )
             return {"status": "error", "message": str(e)}
+
+    async def list_workspaces(self) -> list[str]:
+        """Return all LightRAG workspaces recorded in the registry node.
+
+        Uses ``__LightRAGWorkspace__`` label (same convention as Neo4JStorage).
+        Returns [] when the driver is not yet initialised.
+        """
+        if self._driver is None:
+            return []
+        query = (
+            "MATCH (n:__LightRAGWorkspace__) RETURN n.name AS name ORDER BY name"
+        )
+        try:
+            async with self._driver.session() as session:
+                result = await session.run(query)
+                records = await result.data()
+                await result.consume()
+            return [r["name"] for r in records if r.get("name") is not None]
+        except Exception as e:
+            logger.warning(f"[{self.workspace}] list_workspaces Memgraph query failed: {e}")
+            return []
 
     async def edge_degree(self, src_id: str, tgt_id: str) -> int:
         """Get the total degree (sum of relationships) of two nodes.
