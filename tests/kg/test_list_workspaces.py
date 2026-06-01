@@ -165,3 +165,98 @@ async def test_base_list_workspaces_can_be_overridden():
     )
     result = await storage.list_workspaces()
     assert result == ["ws1", "ws2"]
+
+
+# ---------------------------------------------------------------------------
+# PGDocStatusStorage tests
+# ---------------------------------------------------------------------------
+
+from unittest.mock import AsyncMock, MagicMock
+
+
+@pytest.mark.asyncio
+async def test_pg_doc_status_list_workspaces():
+    from lightrag.kg.postgres_impl import PGDocStatusStorage
+
+    storage = PGDocStatusStorage.__new__(PGDocStatusStorage)
+    storage.namespace = "doc_status"
+    storage.workspace = "ws1"
+    storage.global_config = {}
+
+    mock_db = MagicMock()
+    mock_db.query = AsyncMock(
+        return_value=[
+            {"workspace": ""},
+            {"workspace": "ws1"},
+            {"workspace": "ws2"},
+        ]
+    )
+    storage.db = mock_db
+
+    result = await storage.list_workspaces()
+    assert result == ["", "ws1", "ws2"]
+    mock_db.query.assert_awaited_once()
+    called_sql = mock_db.query.call_args[0][0]
+    assert "DISTINCT" in called_sql.upper()
+    assert "LIGHTRAG_DOC_STATUS" in called_sql.upper()
+
+
+@pytest.mark.asyncio
+async def test_pg_doc_status_list_workspaces_no_db():
+    """Returns [] gracefully when db is not yet initialized."""
+    from lightrag.kg.postgres_impl import PGDocStatusStorage
+
+    storage = PGDocStatusStorage.__new__(PGDocStatusStorage)
+    storage.namespace = "doc_status"
+    storage.workspace = "ws1"
+    storage.global_config = {}
+    storage.db = None
+
+    result = await storage.list_workspaces()
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# MongoDocStatusStorage tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_mongo_doc_status_list_workspaces():
+    from lightrag.kg.mongo_impl import MongoDocStatusStorage
+
+    storage = MongoDocStatusStorage.__new__(MongoDocStatusStorage)
+    storage.namespace = "doc_status"
+    storage.workspace = "ws1"
+    storage.final_namespace = "ws1_doc_status"
+    storage.global_config = {}
+
+    mock_db = AsyncMock()
+    mock_db.list_collection_names = AsyncMock(
+        return_value=[
+            "doc_status",           # root workspace
+            "ws1_doc_status",
+            "ws2_doc_status",
+            "ws1_text_chunks",      # should be ignored (wrong namespace)
+            "unrelated_collection", # should be ignored
+        ]
+    )
+    storage.db = mock_db
+
+    result = await storage.list_workspaces()
+    assert result == ["", "ws1", "ws2"]
+
+
+@pytest.mark.asyncio
+async def test_mongo_doc_status_list_workspaces_no_db():
+    from lightrag.kg.mongo_impl import MongoDocStatusStorage
+
+    storage = MongoDocStatusStorage.__new__(MongoDocStatusStorage)
+    storage.namespace = "doc_status"
+    storage.workspace = "ws1"
+    storage.final_namespace = "ws1_doc_status"
+    storage.global_config = {}
+    storage.db = None
+
+    result = await storage.list_workspaces()
+    assert result == []
