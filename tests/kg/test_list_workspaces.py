@@ -449,3 +449,53 @@ async def test_memgraph_list_workspaces_no_driver():
 
     result = await storage.list_workspaces()
     assert result == []
+
+
+# ---------------------------------------------------------------------------
+# OpenSearchDocStatusStorage tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_opensearch_doc_status_list_workspaces():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from lightrag.kg.opensearch_impl import OpenSearchDocStatusStorage
+
+    storage = OpenSearchDocStatusStorage.__new__(OpenSearchDocStatusStorage)
+    storage.namespace = "doc_status"
+    storage.workspace = "ws1"
+    storage.final_namespace = "ws1_doc_status"
+    storage._index_name = "ws1_doc_status"
+    storage.global_config = {}
+
+    mock_client = AsyncMock()
+    mock_client.indices = MagicMock()
+    mock_client.indices.get = AsyncMock(
+        return_value={
+            "doc_status": {},           # root workspace
+            "ws1_doc_status": {},
+            "ws2_doc_status": {},
+            "ws1_text_chunks": {},      # different namespace — should be ignored
+        }
+    )
+    storage.client = mock_client
+
+    result = await storage.list_workspaces()
+    assert result == ["", "ws1", "ws2"]
+
+
+@pytest.mark.asyncio
+async def test_opensearch_doc_status_list_workspaces_no_client():
+    from lightrag.kg.opensearch_impl import OpenSearchDocStatusStorage
+
+    storage = OpenSearchDocStatusStorage.__new__(OpenSearchDocStatusStorage)
+    storage.namespace = "doc_status"
+    storage.workspace = "ws1"
+    storage.final_namespace = "ws1_doc_status"
+    storage._index_name = "ws1_doc_status"
+    storage.global_config = {}
+    storage.client = None
+
+    result = await storage.list_workspaces()
+    assert result == []
