@@ -350,3 +350,102 @@ async def test_redis_doc_status_drop_deregisters_workspace():
     result = await storage.drop()
     assert result["status"] == "success"
     storage._mock_redis.srem.assert_awaited_once_with(LIGHTRAG_WORKSPACE_REGISTRY_KEY, "ws1")
+
+
+# ---------------------------------------------------------------------------
+# Neo4JStorage tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_neo4j_list_workspaces():
+    from lightrag.kg.neo4j_impl import Neo4JStorage
+
+    storage = Neo4JStorage.__new__(Neo4JStorage)
+    storage.namespace = "chunk_entity_relation"
+    storage.workspace = "ws1"
+    storage.global_config = {}
+    storage.embedding_func = None
+    storage.cosine_better_than_threshold = 0.2
+    storage.meta_fields = set()
+    storage._DATABASE = "neo4j"
+
+    mock_result = AsyncMock()
+    mock_result.data = AsyncMock(return_value=[
+        {"name": "base"},
+        {"name": "ws1"},
+        {"name": "ws2"},
+    ])
+    mock_result.consume = AsyncMock()
+
+    mock_session = AsyncMock()
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    mock_driver = MagicMock()
+    mock_driver.session = MagicMock(return_value=mock_session)
+    storage._driver = mock_driver
+
+    result = await storage.list_workspaces()
+    assert result == ["base", "ws1", "ws2"]
+
+
+@pytest.mark.asyncio
+async def test_neo4j_list_workspaces_no_driver():
+    from lightrag.kg.neo4j_impl import Neo4JStorage
+
+    storage = Neo4JStorage.__new__(Neo4JStorage)
+    storage.workspace = "ws1"
+    storage.global_config = {}
+    storage._driver = None
+
+    result = await storage.list_workspaces()
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# MemgraphStorage tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_memgraph_list_workspaces():
+    from lightrag.kg.memgraph_impl import MemgraphStorage
+
+    storage = MemgraphStorage.__new__(MemgraphStorage)
+    storage.namespace = "chunk_entity_relation"
+    storage.workspace = "ws1"
+    storage.global_config = {}
+    storage.embedding_func = None
+    storage.cosine_better_than_threshold = 0.2
+    storage.meta_fields = set()
+
+    mock_result = AsyncMock()
+    mock_result.data = AsyncMock(return_value=[{"name": "base"}, {"name": "ws1"}])
+    mock_result.consume = AsyncMock()
+
+    mock_session = AsyncMock()
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    mock_driver = MagicMock()
+    mock_driver.session = MagicMock(return_value=mock_session)
+    storage._driver = mock_driver
+
+    result = await storage.list_workspaces()
+    assert result == ["base", "ws1"]
+
+
+@pytest.mark.asyncio
+async def test_memgraph_list_workspaces_no_driver():
+    from lightrag.kg.memgraph_impl import MemgraphStorage
+
+    storage = MemgraphStorage.__new__(MemgraphStorage)
+    storage.workspace = "ws1"
+    storage.global_config = {}
+    storage._driver = None
+
+    result = await storage.list_workspaces()
+    assert result == []
