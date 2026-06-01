@@ -549,3 +549,38 @@ class JsonDocStatusStorage(DocStatusStorage):
         except Exception as e:
             logger.error(f"[{self.workspace}] Error dropping {self.namespace}: {e}")
             return {"status": "error", "message": str(e)}
+
+    async def list_workspaces(self) -> list[str]:
+        """Scan working_dir for workspace subdirectories and the root workspace.
+
+        A directory is a valid workspace if:
+          - Its name matches ``[a-zA-Z0-9_]+`` (same rules as the API endpoint).
+          - It contains ``kv_store_doc_status.json``.
+
+        The root workspace (``self.workspace == ""``) is represented by the
+        sentinel file living directly in ``working_dir``; it is returned as ``""``.
+        """
+        import re
+        from pathlib import Path
+
+        working_dir = Path(self.global_config["working_dir"])
+        if not working_dir.exists():
+            return []
+
+        workspaces: list[str] = []
+
+        # Root workspace: sentinel file lives directly in working_dir
+        if (working_dir / f"kv_store_{self.namespace}.json").exists():
+            workspaces.append("")
+
+        # Named workspaces: subdirectory containing the sentinel file
+        _valid_name = re.compile(r"^[a-zA-Z0-9_]+$")
+        for entry in sorted(working_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            if not _valid_name.match(entry.name):
+                continue
+            if (entry / f"kv_store_{self.namespace}.json").exists():
+                workspaces.append(entry.name)
+
+        return workspaces
