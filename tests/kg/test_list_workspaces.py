@@ -260,3 +260,93 @@ async def test_mongo_doc_status_list_workspaces_no_db():
 
     result = await storage.list_workspaces()
     assert result == []
+
+
+# ---------------------------------------------------------------------------
+# RedisDocStatusStorage tests
+# ---------------------------------------------------------------------------
+
+from contextlib import asynccontextmanager
+
+
+def _make_redis_doc_status_storage(workspace: str = "ws1"):
+    """Build a RedisDocStatusStorage-like object with fields we need."""
+    from lightrag.kg.redis_impl import RedisDocStatusStorage
+
+    storage = RedisDocStatusStorage.__new__(RedisDocStatusStorage)
+    storage.namespace = "doc_status"
+    storage.workspace = workspace if workspace else "_"
+    storage.final_namespace = (
+        f"{workspace}_doc_status" if workspace else "doc_status"
+    )
+    storage.global_config = {}
+    storage._initialized = True
+
+    mock_redis = AsyncMock()
+
+    @asynccontextmanager
+    async def _conn():
+        yield mock_redis
+
+    storage._get_redis_connection = _conn
+    storage._mock_redis = mock_redis
+    return storage
+
+
+@pytest.mark.asyncio
+async def test_redis_doc_status_list_workspaces():
+    from lightrag.kg.redis_impl import LIGHTRAG_WORKSPACE_REGISTRY_KEY
+
+    storage = _make_redis_doc_status_storage("ws1")
+    storage._mock_redis.smembers = AsyncMock(
+        return_value={b"", b"ws1", b"ws2"}
+    )
+
+    result = await storage.list_workspaces()
+    assert result == ["", "ws1", "ws2"]
+    storage._mock_redis.smembers.assert_awaited_once_with(LIGHTRAG_WORKSPACE_REGISTRY_KEY)
+
+
+@pytest.mark.asyncio
+async def test_redis_doc_status_list_workspaces_root_workspace():
+    """Root workspace (empty string) is represented as '' in registry."""
+    from lightrag.kg.redis_impl import LIGHTRAG_WORKSPACE_REGISTRY_KEY
+
+    storage = _make_redis_doc_status_storage("")  # root workspace
+    storage._mock_redis.smembers = AsyncMock(return_value={b""})
+
+    result = await storage.list_workspaces()
+    assert result == [""]
+
+
+@pytest.mark.asyncio
+async def test_redis_doc_status_initialize_registers_workspace():
+    from lightrag.kg.redis_impl import LIGHTRAG_WORKSPACE_REGISTRY_KEY
+    from unittest.mock import patch
+
+    storage = _make_redis_doc_status_storage("ws1")
+    storage._mock_redis.ping = AsyncMock(return_value=True)
+    storage._mock_redis.sadd = AsyncMock(return_value=1)
+    storage._initialized = False
+
+    @asynccontextmanager
+    async def _fake_lock():
+        yield
+
+    with patch("lightrag.kg.redis_impl.get_data_init_lock", _fake_lock):
+        await storage.initialize()
+
+    storage._mock_redis.sadd.assert_awaited_once_with(LIGHTRAG_WORKSPACE_REGISTRY_KEY, "ws1")
+
+
+@pytest.mark.asyncio
+async def test_redis_doc_status_drop_deregisters_workspace():
+    from lightrag.kg.redis_impl import LIGHTRAG_WORKSPACE_REGISTRY_KEY
+
+    storage = _make_redis_doc_status_storage("ws1")
+    storage._mock_redis.scan = AsyncMock(return_value=(0, []))
+    storage._mock_redis.srem = AsyncMock(return_value=1)
+
+    result = await storage.drop()
+    assert result["status"] == "success"
+    storage._mock_redis.srem.assert_awaited_once_with(LIGHTRAG_WORKSPACE_REGISTRY_KEY, "ws1")
