@@ -514,7 +514,7 @@ async def test_lightrag_list_workspaces_uses_doc_status():
 
     mock_doc_status = AsyncMock()
     mock_doc_status.list_workspaces = AsyncMock(return_value=["", "ws1", "ws2"])
-    rag.doc_status_storage = mock_doc_status
+    rag.doc_status = mock_doc_status
 
     mock_graph = AsyncMock()
     mock_graph.list_workspaces = AsyncMock(return_value=["graph_ws"])
@@ -534,7 +534,7 @@ async def test_lightrag_list_workspaces_falls_back_to_graph():
 
     mock_doc_status = AsyncMock()
     mock_doc_status.list_workspaces = AsyncMock(return_value=[])
-    rag.doc_status_storage = mock_doc_status
+    rag.doc_status = mock_doc_status
 
     mock_graph = AsyncMock()
     mock_graph.list_workspaces = AsyncMock(return_value=["base", "ws1"])
