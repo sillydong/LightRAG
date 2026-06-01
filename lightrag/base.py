@@ -171,6 +171,20 @@ class StorageNameSpace(ABC):
         """Finalize the storage"""
         pass
 
+    async def list_workspaces(self) -> list[str]:
+        """Return all workspace identifiers visible through this storage connection.
+
+        Implementations query their own backend for ALL workspace names accessible
+        via the current connection/config (not just the current instance's workspace).
+        Backends that cannot enumerate workspaces return an empty list.
+
+        Returns:
+            List of workspace strings.  Implementations should return a sorted list.
+            Empty string ``""`` represents the root / default workspace (no explicit
+            workspace name).  Default implementation returns ``[]``.
+        """
+        return []
+
     @abstractmethod
     async def index_done_callback(self) -> None:
         """Commit the storage operations after indexing"""

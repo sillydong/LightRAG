@@ -2180,6 +2180,11 @@ offline = [
     { name = "xlsxwriter" },
     { name = "zhipuai" },
 ]
+offline-essential = [
+    { name = "asyncpg" },
+    { name = "openai" },
+    { name = "pgvector" },
+]
 offline-llm = [
     { name = "aioboto3" },
     { name = "anthropic" },
@@ -2267,6 +2272,7 @@ requires-dist = [
     { name = "aiohttp", marker = "extra == 'api'" },
     { name = "anthropic", marker = "extra == 'offline-llm'", specifier = ">=0.18.0,<1.0.0" },
     { name = "ascii-colors", marker = "extra == 'api'" },
+    { name = "asyncpg", marker = "extra == 'offline-essential'", specifier = ">=0.31.0,<1.0.0" },
     { name = "asyncpg", marker = "extra == 'offline-storage'", specifier = ">=0.31.0,<1.0.0" },
     { name = "bcrypt", marker = "extra == 'api'", specifier = ">=4.0.0" },
     { name = "configparser" },
@@ -2304,12 +2310,14 @@ requires-dist = [
     { name = "numpy", marker = "extra == 'api'", specifier = ">=1.24.0,<3.0.0" },
     { name = "ollama", marker = "extra == 'offline-llm'", specifier = ">=0.1.0,<1.0.0" },
     { name = "openai", marker = "extra == 'api'", specifier = ">=2.0.0,<3.0.0" },
+    { name = "openai", marker = "extra == 'offline-essential'", specifier = ">=2.0.0,<3.0.0" },
     { name = "openai", marker = "extra == 'offline-llm'", specifier = ">=2.0.0,<3.0.0" },
     { name = "openpyxl", marker = "extra == 'api'", specifier = ">=3.0.0,<4.0.0" },
     { name = "opensearch-py", marker = "extra == 'offline-storage'", specifier = ">=3.0.0,<4.0.0" },
     { name = "packaging" },
     { name = "pandas", specifier = ">=2.0.0,<2.4.0" },
     { name = "pandas", marker = "extra == 'api'", specifier = ">=2.0.0,<2.4.0" },
+    { name = "pgvector", marker = "extra == 'offline-essential'", specifier = ">=0.4.2,<1.0.0" },
     { name = "pgvector", marker = "extra == 'offline-storage'", specifier = ">=0.4.2,<1.0.0" },
     { name = "pipmaster" },
     { name = "pipmaster", marker = "extra == 'api'" },
@@ -2355,7 +2363,7 @@ requires-dist = [
     { name = "xlsxwriter", marker = "extra == 'api'", specifier = ">=3.1.0" },
     { name = "zhipuai", marker = "extra == 'offline-llm'", specifier = ">=2.0.0,<3.0.0" },
 ]
-provides-extras = ["pytest", "api", "offline-storage", "offline-llm", "offline", "test", "evaluation", "observability"]
+provides-extras = ["pytest", "api", "offline-storage", "offline-llm", "offline-essential", "offline", "test", "evaluation", "observability"]
 
 [[package]]
 name = "llama-index"

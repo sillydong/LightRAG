@@ -1,0 +1,17 @@
+# LightRAG Complete Offline Dependencies
+# Install with: pip install -r requirements-offline.txt
+# For offline installation:
+#   pip download -r requirements-offline.txt -d ./packages
+#   pip install --no-index --find-links=./packages -r requirements-offline.txt
+#
+# Recommended: Use pip install lightrag-hku[offline] for the same effect
+# Or use constraints: pip install --constraint constraints-offline.txt -r requirements-offline.txt
+
+asyncpg>=0.31.0,<1.0.0
+bcrypt>=4.0.0
+openai>=2.0.0,<3.0.0
+pgvector>=0.4.2,<1.0.0
+pycryptodome>=3.0.0,<4.0.0
+pypdf>=6.1.0
+python-docx>=0.8.11,<2.0.0
+python-pptx>=0.6.21,<2.0.0

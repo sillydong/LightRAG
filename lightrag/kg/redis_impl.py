@@ -36,6 +36,9 @@ from tenacity import (
 config = configparser.ConfigParser()
 config.read("config.ini", "utf-8")
 
+# Registry key for workspace enumeration (a Redis SET of canonical workspace names)
+LIGHTRAG_WORKSPACE_REGISTRY_KEY = "__lightrag_workspaces__"
+
 # Constants for Redis connection pool with environment variable support
 MAX_CONNECTIONS = int(os.getenv("REDIS_MAX_CONNECTIONS", "200"))
 SOCKET_TIMEOUT = float(os.getenv("REDIS_SOCKET_TIMEOUT", "30.0"))
@@ -589,6 +592,13 @@ class RedisDocStatusStorage(DocStatusStorage):
                     logger.info(
                         f"[{self.workspace}] Connected to Redis for doc status namespace {self.namespace}"
                     )
+                    # Register this workspace in the global workspace registry.
+                    # canonical_ws is "" for the root workspace (final_namespace == namespace
+                    # means no workspace prefix was applied).
+                    canonical_ws = (
+                        "" if self.final_namespace == self.namespace else self.workspace
+                    )
+                    await redis.sadd(LIGHTRAG_WORKSPACE_REGISTRY_KEY, canonical_ws)
                     self._initialized = True
             except Exception as e:
                 logger.error(
@@ -1227,6 +1237,12 @@ class RedisDocStatusStorage(DocStatusStorage):
                     if cursor == 0:
                         break
 
+                # Remove this workspace from the registry
+                canonical_ws = (
+                    "" if self.final_namespace == self.namespace else self.workspace
+                )
+                await redis.srem(LIGHTRAG_WORKSPACE_REGISTRY_KEY, canonical_ws)
+
                 logger.info(
                     f"[{self.workspace}] Dropped {deleted_count} doc status keys from {self.namespace}"
                 )
@@ -1236,3 +1252,22 @@ class RedisDocStatusStorage(DocStatusStorage):
                 f"[{self.workspace}] Error dropping doc status {self.namespace}: {e}"
             )
             return {"status": "error", "message": str(e)}
+
+    async def list_workspaces(self) -> list[str]:
+        """Return all workspaces from the Redis workspace registry SET.
+
+        The registry key ``LIGHTRAG_WORKSPACE_REGISTRY_KEY`` is maintained by
+        ``initialize`` (add) and ``drop`` (remove).  Returns [] on any error so
+        callers fall back gracefully.
+        """
+        try:
+            async with self._get_redis_connection() as redis:
+                raw: set = await redis.smembers(LIGHTRAG_WORKSPACE_REGISTRY_KEY)
+            workspaces = []
+            for member in raw:
+                ws = member.decode() if isinstance(member, bytes) else member
+                workspaces.append(ws)
+            return sorted(workspaces)
+        except Exception as e:
+            logger.warning(f"[list_workspaces] Redis smembers failed: {e}")
+            return []

@@ -316,6 +316,12 @@ export type StatusCountsResponse = {
   status_counts: Record<string, number>
 }
 
+export type WorkspacesResponse = {
+  workspaces: string[]
+  current: string
+  default: string
+}
+
 export type AuthStatusResponse = {
   auth_configured: boolean
   access_token?: string
@@ -423,6 +429,7 @@ axiosInstance.interceptors.request.use((config) => {
 
   const apiKey = useSettingsStore.getState().apiKey
   const token = localStorage.getItem('LIGHTRAG-API-TOKEN');
+  const workspace = localStorage.getItem('LIGHTRAG-WORKSPACE');
 
   // Always include token if it exists, regardless of path
   if (token) {
@@ -430,6 +437,9 @@ axiosInstance.interceptors.request.use((config) => {
   }
   if (apiKey) {
     config.headers['X-API-Key'] = apiKey
+  }
+  if (workspace) {
+    config.headers['LIGHTRAG-WORKSPACE'] = workspace
   }
   return config
 })
@@ -567,6 +577,11 @@ export const checkHealth = async (): Promise<
   }
 }
 
+export const getWorkspaces = async (): Promise<WorkspacesResponse> => {
+  const response = await axiosInstance.get('/workspaces')
+  return response.data
+}
+
 export const getDocuments = async (): Promise<DocsStatusesResponse> => {
   const response = await axiosInstance.get('/documents')
   return response.data
@@ -599,6 +614,7 @@ export const queryTextStream = async (
 ) => {
   const apiKey = useSettingsStore.getState().apiKey;
   const token = localStorage.getItem('LIGHTRAG-API-TOKEN');
+  const workspace = localStorage.getItem('LIGHTRAG-WORKSPACE');
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     'Accept': 'application/x-ndjson',
@@ -608,6 +624,9 @@ export const queryTextStream = async (
   }
   if (apiKey) {
     headers['X-API-Key'] = apiKey;
+  }
+  if (workspace) {
+    headers['LIGHTRAG-WORKSPACE'] = workspace;
   }
 
   try {

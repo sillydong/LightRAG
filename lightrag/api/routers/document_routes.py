@@ -6,31 +6,33 @@ import asyncio
 import re
 import shutil
 import time
-from uuid import uuid4
-from lightrag.utils import logger, get_pinyin_sort_key, performance_timing_log
-import aiofiles
 import traceback
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Literal
 from io import BytesIO
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
+from uuid import uuid4
+
+import aiofiles
 from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
     File,
     HTTPException,
+    Request,
     UploadFile,
 )
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from lightrag import LightRAG
-from lightrag.base import DocProcessingStatus, DocStatus
+from lightrag.api.utils_api import get_combined_auth_dependency
+from lightrag.base import DeletionResult, DocProcessingStatus, DocStatus
 from lightrag.constants import (
     FULL_DOCS_FORMAT_PENDING_PARSE,
-    PARSER_ENGINE_LEGACY,
     PARSED_ARTIFACT_DIR_SUFFIXES,
     PARSED_DIR_NAME,
+    PARSER_ENGINE_LEGACY,
     PROCESS_OPTION_CHUNK_FIXED,
     PROCESS_OPTION_CHUNK_PARAGRAH,
     PROCESS_OPTION_CHUNK_RECURSIVE,
@@ -46,9 +48,12 @@ from lightrag.parser.routing import (
 )
 from lightrag.utils import (
     generate_track_id,
+    get_pinyin_sort_key,
+    logger,
     move_file_to_parsed_dir,
+    performance_timing_log,
 )
-from lightrag.api.utils_api import get_combined_auth_dependency
+
 from ..config import global_args
 
 
@@ -2928,7 +2933,7 @@ async def background_delete_documents(
 
 
 def create_document_routes(
-    rag: LightRAG, doc_manager: DocumentManager, api_key: Optional[str] = None
+    create_rag, create_doc_manager, api_key: Optional[str] = None
 ):
     # Fresh router per call — see the note above the temp_prefix constant.
     router = APIRouter(
@@ -2942,7 +2947,7 @@ def create_document_routes(
     @router.post(
         "/scan", response_model=ScanResponse, dependencies=[Depends(combined_auth)]
     )
-    async def scan_for_new_documents(background_tasks: BackgroundTasks):
+    async def scan_for_new_documents(raw_request: Request, background_tasks: BackgroundTasks):
         """
         Trigger the scanning process for new documents.
 
@@ -2971,6 +2976,9 @@ def create_document_routes(
         """
         from lightrag.exceptions import PipelineNotInitializedError
         from lightrag.kg.shared_storage import get_namespace_data, get_namespace_lock
+
+        rag = await create_rag(raw_request)
+        doc_manager = create_doc_manager(raw_request)
 
         # Generate track_id with "scan" prefix for scanning operation
         track_id = generate_track_id("scan")
@@ -3066,7 +3074,7 @@ def create_document_routes(
         "/upload", response_model=InsertResponse, dependencies=[Depends(combined_auth)]
     )
     async def upload_to_input_dir(
-        background_tasks: BackgroundTasks, file: UploadFile = File(...)
+        raw_request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)
     ):
         """
         Upload a file to the input directory and index it.
@@ -3142,6 +3150,8 @@ def create_document_routes(
         """
         slot_reserved = False
         try:
+            rag = await create_rag(raw_request)
+            doc_manager = create_doc_manager(raw_request)
             # Reject upload while a scan is in its CLASSIFICATION
             # phase or a destructive job (clear / per-doc delete) is
             # in flight, AND reserve a pending-enqueue slot so a scan
@@ -3308,7 +3318,7 @@ def create_document_routes(
         "/text", response_model=InsertResponse, dependencies=[Depends(combined_auth)]
     )
     async def insert_text(
-        request: InsertTextRequest, background_tasks: BackgroundTasks
+        raw_request: Request, request: InsertTextRequest, background_tasks: BackgroundTasks
     ):
         """
         Insert text into the RAG system.
@@ -3338,6 +3348,7 @@ def create_document_routes(
         """
         slot_reserved = False
         try:
+            rag = await create_rag(raw_request)
             # Reject text insertion while a scan is in progress AND reserve
             # a pending-enqueue slot — see /upload for the rationale.
             slot_reserved = await _reserve_enqueue_slot(rag)
@@ -3412,7 +3423,7 @@ def create_document_routes(
         dependencies=[Depends(combined_auth)],
     )
     async def insert_texts(
-        request: InsertTextsRequest, background_tasks: BackgroundTasks
+        raw_request: Request, request: InsertTextsRequest, background_tasks: BackgroundTasks
     ):
         """
         Insert multiple texts into the RAG system.
@@ -3443,6 +3454,7 @@ def create_document_routes(
         """
         slot_reserved = False
         try:
+            rag = await create_rag(raw_request)
             # Reject batch text insertion while a scan is in progress AND
             # reserve a pending-enqueue slot — see /upload for the rationale.
             slot_reserved = await _reserve_enqueue_slot(rag)
@@ -3533,7 +3545,7 @@ def create_document_routes(
     @router.delete(
         "", response_model=ClearDocumentsResponse, dependencies=[Depends(combined_auth)]
     )
-    async def clear_documents():
+    async def clear_documents(raw_request: Request):
         """
         Clear all documents from the RAG system.
 
@@ -3570,6 +3582,9 @@ def create_document_routes(
             get_namespace_data,
             get_namespace_lock,
         )
+
+        rag = await create_rag(raw_request)
+        doc_manager = create_doc_manager(raw_request)
 
         # Get pipeline status and lock
         pipeline_status = await get_namespace_data(
@@ -3746,7 +3761,7 @@ def create_document_routes(
         dependencies=[Depends(combined_auth)],
         response_model=PipelineStatusResponse,
     )
-    async def get_pipeline_status() -> PipelineStatusResponse:
+    async def get_pipeline_status(raw_request: Request) -> PipelineStatusResponse:
         """
         Get the current status of the document indexing pipeline.
 
@@ -3771,10 +3786,11 @@ def create_document_routes(
             HTTPException: If an error occurs while retrieving pipeline status (500)
         """
         try:
+            rag = await create_rag(raw_request)
             from lightrag.kg.shared_storage import (
+                get_all_update_flags_status,
                 get_namespace_data,
                 get_namespace_lock,
-                get_all_update_flags_status,
             )
 
             pipeline_status = await get_namespace_data(
@@ -3845,7 +3861,7 @@ def create_document_routes(
     @router.get(
         "", response_model=DocsStatusesResponse, dependencies=[Depends(combined_auth)]
     )
-    async def documents() -> DocsStatusesResponse:
+    async def documents(raw_request: Request) -> DocsStatusesResponse:
         """
         Get the status of all documents in the system. This endpoint is deprecated; use /documents/paginated instead.
         To prevent excessive resource consumption, a maximum of 1,000 records is returned.
@@ -3864,6 +3880,7 @@ def create_document_routes(
             HTTPException: If an error occurs while retrieving document statuses (500).
         """
         try:
+            rag = await create_rag(raw_request)
             statuses = (
                 DocStatus.PENDING,
                 DocStatus.PARSING,
@@ -3961,6 +3978,7 @@ def create_document_routes(
         summary="Delete a document and all its associated data by its ID.",
     )
     async def delete_document(
+        raw_request: Request,
         delete_request: DeleteDocRequest,
         background_tasks: BackgroundTasks,
     ) -> DeleteDocByIdResponse:
@@ -4001,6 +4019,8 @@ def create_document_routes(
 
         slot_acquired = False
         try:
+            rag = await create_rag(raw_request)
+            doc_manager = create_doc_manager(raw_request)
             # Atomically reserve the destructive slot BEFORE returning
             # ``deletion_started``.  Without this, the bg task would set
             # destructive_busy only when it later runs — leaving a
@@ -4053,7 +4073,7 @@ def create_document_routes(
         response_model=ClearCacheResponse,
         dependencies=[Depends(combined_auth)],
     )
-    async def clear_cache(request: ClearCacheRequest):
+    async def clear_cache(raw_request: Request, request: ClearCacheRequest):
         """
         Clear all cache data from the LLM response cache storage.
 
@@ -4070,6 +4090,7 @@ def create_document_routes(
             HTTPException: If an error occurs during cache clearing (500).
         """
         try:
+            rag = await create_rag(raw_request)
             # Call the aclear_cache method (no modes parameter)
             await rag.aclear_cache()
 
@@ -4082,12 +4103,90 @@ def create_document_routes(
             logger.error(traceback.format_exc())
             raise HTTPException(status_code=500, detail=str(e))
 
+
+    @router.delete(
+        "/delete_entity",
+        response_model=DeletionResult,
+        dependencies=[Depends(combined_auth)],
+    )
+    async def delete_entity(raw_request: Request, request: DeleteEntityRequest):
+        """
+        Delete an entity and all its relationships from the knowledge graph.
+
+        Args:
+            request (DeleteEntityRequest): The request body containing the entity name.
+
+        Returns:
+            DeletionResult: An object containing the outcome of the deletion process.
+
+        Raises:
+            HTTPException: If the entity is not found (404) or an error occurs (500).
+        """
+        try:
+            rag = await create_rag(raw_request)
+            await check_pipeline_busy_or_raise(rag)
+            result = await rag.adelete_by_entity(entity_name=request.entity_name)
+            if result.status == "not_found":
+                raise HTTPException(status_code=404, detail=result.message)
+            if result.status == "fail":
+                raise HTTPException(status_code=500, detail=result.message)
+            # Set doc_id to empty string since this is an entity operation, not document
+            result.doc_id = ""
+            return result
+        except HTTPException:
+            raise
+        except Exception as e:
+            error_msg = f"Error deleting entity '{request.entity_name}': {str(e)}"
+            logger.error(error_msg)
+            logger.error(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=error_msg)
+
+    @router.delete(
+        "/delete_relation",
+        response_model=DeletionResult,
+        dependencies=[Depends(combined_auth)],
+    )
+    async def delete_relation(raw_request: Request, request: DeleteRelationRequest):
+        """
+        Delete a relationship between two entities from the knowledge graph.
+
+        Args:
+            request (DeleteRelationRequest): The request body containing the source and target entity names.
+
+        Returns:
+            DeletionResult: An object containing the outcome of the deletion process.
+
+        Raises:
+            HTTPException: If the relation is not found (404) or an error occurs (500).
+        """
+        try:
+            rag = await create_rag(raw_request)
+            await check_pipeline_busy_or_raise(rag)
+            result = await rag.adelete_by_relation(
+                source_entity=request.source_entity,
+                target_entity=request.target_entity,
+            )
+            if result.status == "not_found":
+                raise HTTPException(status_code=404, detail=result.message)
+            if result.status == "fail":
+                raise HTTPException(status_code=500, detail=result.message)
+            # Set doc_id to empty string since this is a relation operation, not document
+            result.doc_id = ""
+            return result
+        except HTTPException:
+            raise
+        except Exception as e:
+            error_msg = f"Error deleting relation from '{request.source_entity}' to '{request.target_entity}': {str(e)}"
+            logger.error(error_msg)
+            logger.error(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=error_msg)
+
     @router.get(
         "/track_status/{track_id}",
         response_model=TrackStatusResponse,
         dependencies=[Depends(combined_auth)],
     )
-    async def get_track_status(track_id: str) -> TrackStatusResponse:
+    async def get_track_status(raw_request: Request, track_id: str) -> TrackStatusResponse:
         """
         Get the processing status of documents by tracking ID.
 
@@ -4107,6 +4206,7 @@ def create_document_routes(
             HTTPException: If track_id is invalid (400) or an error occurs (500).
         """
         try:
+            rag = await create_rag(raw_request)
             # Validate track_id
             if not track_id or not track_id.strip():
                 raise HTTPException(status_code=400, detail="Track ID cannot be empty")
@@ -4162,6 +4262,7 @@ def create_document_routes(
         dependencies=[Depends(combined_auth)],
     )
     async def get_documents_paginated(
+        raw_request: Request,
         request: DocumentsRequest,
     ) -> PaginatedDocsResponse:
         """
@@ -4183,6 +4284,7 @@ def create_document_routes(
         Raises:
             HTTPException: If an error occurs while retrieving documents (500).
         """
+        rag = await create_rag(raw_request)
         trace_id = uuid4().hex[:8]
         request_start = time.perf_counter()
         status_filter_value = (
@@ -4342,7 +4444,7 @@ def create_document_routes(
         response_model=StatusCountsResponse,
         dependencies=[Depends(combined_auth)],
     )
-    async def get_document_status_counts() -> StatusCountsResponse:
+    async def get_document_status_counts(raw_request: Request) -> StatusCountsResponse:
         """
         Get counts of documents by status.
 
@@ -4356,6 +4458,7 @@ def create_document_routes(
             HTTPException: If an error occurs while retrieving status counts (500).
         """
         try:
+            rag = await create_rag(raw_request)
             status_counts = await rag.doc_status.get_all_status_counts()
             return StatusCountsResponse(status_counts=status_counts)
 
@@ -4369,7 +4472,7 @@ def create_document_routes(
         response_model=ReprocessResponse,
         dependencies=[Depends(combined_auth)],
     )
-    async def reprocess_failed_documents(background_tasks: BackgroundTasks):
+    async def reprocess_failed_documents(raw_request: Request, background_tasks: BackgroundTasks):
         """
         Reprocess failed and pending documents.
 
@@ -4395,6 +4498,7 @@ def create_document_routes(
             HTTPException: If an error occurs while initiating reprocessing (500).
         """
         try:
+            rag = await create_rag(raw_request)
             # Start the reprocessing in the background
             # Note: Reprocessed documents retain their original track_id from initial upload
             background_tasks.add_task(rag.apipeline_process_enqueue_documents)
@@ -4415,7 +4519,7 @@ def create_document_routes(
         response_model=CancelPipelineResponse,
         dependencies=[Depends(combined_auth)],
     )
-    async def cancel_pipeline():
+    async def cancel_pipeline(raw_request: Request):
         """
         Request cancellation of the currently running pipeline.
 
@@ -4437,6 +4541,7 @@ def create_document_routes(
             HTTPException: If an error occurs while setting cancellation flag (500).
         """
         try:
+            rag = await create_rag(raw_request)
             from lightrag.kg.shared_storage import (
                 get_namespace_data,
                 get_namespace_lock,

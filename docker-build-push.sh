@@ -1,19 +1,27 @@
 #!/bin/bash
 set -e
 
-# Configuration
-IMAGE_NAME="ghcr.io/hkuds/lightrag"
-DOCKERFILE="Dockerfile"
-TAG="latest"
+# Usage: ./docker-build-push.sh IMAGE_NAME=<name> DOCKERFILE=<file> TAG=<tag>
+# Example: ./docker-build-push.sh IMAGE_NAME="sillydong/lightrag" DOCKERFILE="Dockerfile.essential" TAG="v1.5.3rc3-essential"
 
-# Get version from git tags
-VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev")
+for arg in "$@"; do
+    case "$arg" in
+        IMAGE_NAME=*) IMAGE_NAME="${arg#IMAGE_NAME=}" ;;
+        DOCKERFILE=*) DOCKERFILE="${arg#DOCKERFILE=}" ;;
+        TAG=*)        TAG="${arg#TAG=}" ;;
+    esac
+done
+
+if [ -z "$IMAGE_NAME" ] || [ -z "$DOCKERFILE" ] || [ -z "$TAG" ]; then
+    echo "Usage: $0 IMAGE_NAME=<name> DOCKERFILE=<file> TAG=<tag>"
+    echo "Example: $0 IMAGE_NAME=\"sillydong/lightrag\" DOCKERFILE=\"Dockerfile.essential\" TAG=\"v1.5.3rc3-essential\""
+    exit 1
+fi
 
 echo "=================================="
 echo "  Multi-Architecture Docker Build"
 echo "=================================="
 echo "Image: ${IMAGE_NAME}:${TAG}"
-echo "Version: ${VERSION}"
 echo "Platforms: linux/amd64, linux/arm64"
 echo "=================================="
 echo ""
@@ -54,7 +62,6 @@ docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --file ${DOCKERFILE} \
   --tag ${IMAGE_NAME}:${TAG} \
-  --tag ${IMAGE_NAME}:${VERSION} \
   --push \
   .
 
@@ -63,7 +70,6 @@ echo "✓ Build and push complete!"
 echo ""
 echo "Images pushed:"
 echo "  - ${IMAGE_NAME}:${TAG}"
-echo "  - ${IMAGE_NAME}:${VERSION}"
 echo ""
 echo "Verifying multi-architecture manifest..."
 echo ""

@@ -766,6 +766,38 @@ class MongoDocStatusStorage(DocStatusStorage):
             )
             return {"status": "error", "message": str(e)}
 
+    async def list_workspaces(self) -> list[str]:
+        """Return all workspaces by scanning MongoDB collection names.
+
+        Collections follow the naming convention ``{workspace}_{namespace}``
+        (e.g. ``ws1_doc_status``) with the root workspace stored as just
+        ``{namespace}`` (e.g. ``doc_status``).
+
+        Returns [] if the DB connection is not yet initialised.
+        """
+        if self.db is None:
+            return []
+        try:
+            all_names: list[str] = await self.db.list_collection_names()
+        except Exception as e:
+            logger.warning(f"[list_workspaces] MongoDB list_collection_names failed: {e}")
+            return []
+
+        sentinel = self.namespace          # e.g. "doc_status"
+        suffix = f"_{sentinel}"            # e.g. "_doc_status"
+        workspaces: list[str] = []
+
+        for name in all_names:
+            if name == sentinel:
+                # Root workspace (no prefix)
+                workspaces.append("")
+            elif name.endswith(suffix):
+                ws = name[: -len(suffix)]
+                if ws:
+                    workspaces.append(ws)
+
+        return sorted(workspaces)
+
     async def delete(self, ids: list[str]) -> None:
         await self._data.delete_many({"_id": {"$in": ids}})
 
