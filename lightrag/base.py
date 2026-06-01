@@ -171,6 +171,22 @@ class StorageNameSpace(ABC):
         """Finalize the storage"""
         pass
 
+    async def list_workspaces(self) -> list[str]:
+        """Return all workspace identifiers visible through this storage connection.
+
+        Each implementation queries its own backend for ALL workspace names it can
+        see (not just the current instance's workspace).  Backends that cannot
+        enumerate workspaces (e.g. pure in-memory) return an empty list.
+
+        The API layer merges results from doc_status_storage (primary) and
+        graph_storage (fallback) with the runtime cache.
+
+        Returns:
+            Sorted list of workspace strings.  Empty string ``""`` represents the
+            root / default workspace (no explicit workspace name).
+        """
+        return []
+
     @abstractmethod
     async def index_done_callback(self) -> None:
         """Commit the storage operations after indexing"""
