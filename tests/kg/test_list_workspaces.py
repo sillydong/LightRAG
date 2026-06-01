@@ -34,13 +34,9 @@ def _make_json_doc_status(working_dir: str, workspace: str = "") -> JsonDocStatu
 @pytest.mark.asyncio
 async def test_json_doc_status_list_workspaces_multiple():
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Create workspace directories with sentinel files
+        # Create workspace directories (no sentinel files needed)
         for ws in ("alpha", "beta", "gamma"):
-            ws_dir = os.path.join(tmpdir, ws)
-            os.makedirs(ws_dir)
-            open(os.path.join(ws_dir, "kv_store_doc_status.json"), "w").close()
-        # Root workspace sentinel
-        open(os.path.join(tmpdir, "kv_store_doc_status.json"), "w").close()
+            os.makedirs(os.path.join(tmpdir, ws))
 
         storage = _make_json_doc_status(tmpdir, "alpha")
         result = await storage.list_workspaces()
@@ -48,35 +44,29 @@ async def test_json_doc_status_list_workspaces_multiple():
 
 
 @pytest.mark.asyncio
-async def test_json_doc_status_list_workspaces_skips_dirs_without_sentinel():
+async def test_json_doc_status_list_workspaces_empty_subdir_included():
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Directory without sentinel should be ignored
+        # Empty subdirectory should now be included (directory exists = workspace exists)
         os.makedirs(os.path.join(tmpdir, "empty_dir"))
-        # Directory with sentinel
+        # Directory with data
         ws_dir = os.path.join(tmpdir, "valid_ws")
         os.makedirs(ws_dir)
-        open(os.path.join(ws_dir, "kv_store_doc_status.json"), "w").close()
 
         storage = _make_json_doc_status(tmpdir, "valid_ws")
         result = await storage.list_workspaces()
-        assert result == ["valid_ws"]
+        assert result == ["", "empty_dir", "valid_ws"]
 
 
 @pytest.mark.asyncio
 async def test_json_doc_status_list_workspaces_skips_invalid_names():
     with tempfile.TemporaryDirectory() as tmpdir:
         # Directories with non-alphanumeric/underscore characters should be ignored
-        bad_dir = os.path.join(tmpdir, "bad-ws")
-        os.makedirs(bad_dir)
-        open(os.path.join(bad_dir, "kv_store_doc_status.json"), "w").close()
-        # Valid directory
-        good_dir = os.path.join(tmpdir, "good_ws")
-        os.makedirs(good_dir)
-        open(os.path.join(good_dir, "kv_store_doc_status.json"), "w").close()
+        os.makedirs(os.path.join(tmpdir, "bad-ws"))
+        os.makedirs(os.path.join(tmpdir, "good_ws"))
 
         storage = _make_json_doc_status(tmpdir, "good_ws")
         result = await storage.list_workspaces()
-        assert result == ["good_ws"]
+        assert result == ["", "good_ws"]
 
 
 @pytest.mark.asyncio
@@ -84,7 +74,8 @@ async def test_json_doc_status_list_workspaces_empty_dir():
     with tempfile.TemporaryDirectory() as tmpdir:
         storage = _make_json_doc_status(tmpdir, "ws1")
         result = await storage.list_workspaces()
-        assert result == []
+        # working_dir exists → root "" is always included; ws1 created by _make helper
+        assert result == ["", "ws1"]
 
 
 # ---------------------------------------------------------------------------

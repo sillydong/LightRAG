@@ -553,12 +553,13 @@ class JsonDocStatusStorage(DocStatusStorage):
     async def list_workspaces(self) -> list[str]:
         """Scan working_dir for workspace subdirectories and the root workspace.
 
-        A directory is a valid workspace if:
+        A directory is considered a valid named workspace if:
           - Its name matches ``[a-zA-Z0-9_]+`` (same rules as the API endpoint).
-          - It contains ``kv_store_doc_status.json``.
+          - The subdirectory itself exists (regardless of whether any documents
+            have been inserted yet).
 
-        The root workspace (``self.workspace == ""``) is represented by the
-        sentinel file living directly in ``working_dir``; it is returned as ``""``.
+        The root workspace (``""``) is always included when ``working_dir``
+        itself exists, as it is the implicit default workspace.
         """
         import re
         from pathlib import Path
@@ -567,20 +568,15 @@ class JsonDocStatusStorage(DocStatusStorage):
         if not working_dir.exists():
             return []
 
-        workspaces: list[str] = []
+        workspaces: list[str] = [""]
 
-        # Root workspace: sentinel file lives directly in working_dir
-        if (working_dir / f"kv_store_{self.namespace}.json").exists():
-            workspaces.append("")
-
-        # Named workspaces: subdirectory containing the sentinel file
+        # Named workspaces: any valid-name subdirectory
         _valid_name = re.compile(r"^[a-zA-Z0-9_]+$")
         for entry in sorted(working_dir.iterdir()):
             if not entry.is_dir():
                 continue
             if not _valid_name.match(entry.name):
                 continue
-            if (entry / f"kv_store_{self.namespace}.json").exists():
-                workspaces.append(entry.name)
+            workspaces.append(entry.name)
 
         return workspaces
