@@ -499,3 +499,47 @@ async def test_opensearch_doc_status_list_workspaces_no_client():
 
     result = await storage.list_workspaces()
     assert result == []
+
+
+# ---------------------------------------------------------------------------
+# LightRAG.list_workspaces tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_lightrag_list_workspaces_uses_doc_status():
+    from lightrag.lightrag import LightRAG
+
+    rag = LightRAG.__new__(LightRAG)
+
+    mock_doc_status = AsyncMock()
+    mock_doc_status.list_workspaces = AsyncMock(return_value=["", "ws1", "ws2"])
+    rag.doc_status_storage = mock_doc_status
+
+    mock_graph = AsyncMock()
+    mock_graph.list_workspaces = AsyncMock(return_value=["graph_ws"])
+    rag.chunk_entity_relation_graph = mock_graph
+
+    result = await rag.list_workspaces()
+    assert result == ["", "ws1", "ws2"]
+    mock_doc_status.list_workspaces.assert_awaited_once()
+    mock_graph.list_workspaces.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_lightrag_list_workspaces_falls_back_to_graph():
+    from lightrag.lightrag import LightRAG
+
+    rag = LightRAG.__new__(LightRAG)
+
+    mock_doc_status = AsyncMock()
+    mock_doc_status.list_workspaces = AsyncMock(return_value=[])
+    rag.doc_status_storage = mock_doc_status
+
+    mock_graph = AsyncMock()
+    mock_graph.list_workspaces = AsyncMock(return_value=["base", "ws1"])
+    rag.chunk_entity_relation_graph = mock_graph
+
+    result = await rag.list_workspaces()
+    assert result == ["base", "ws1"]
+    mock_graph.list_workspaces.assert_awaited_once()

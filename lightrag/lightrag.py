@@ -1758,6 +1758,23 @@ class LightRAG(_RoleLLMMixin, _StorageMigrationMixin, _PipelineMixin):
             if update_storage:
                 await self._insert_done()
 
+    async def list_workspaces(self) -> list[str]:
+        """Return all workspace identifiers visible through the current storage backend.
+
+        Queries ``doc_status_storage`` first (reliable: every workspace with
+        inserted documents has doc_status records).  Falls back to
+        ``chunk_entity_relation_graph`` for workspaces that were initialised but
+        have no documents yet (e.g. graph-only usage).
+
+        Returns:
+            List of workspace strings.  ``""`` represents the root/default
+            workspace (no explicit workspace name).
+        """
+        workspaces = await self.doc_status_storage.list_workspaces()
+        if not workspaces:
+            workspaces = await self.chunk_entity_relation_graph.list_workspaces()
+        return workspaces
+
     def query(
         self,
         query: str,

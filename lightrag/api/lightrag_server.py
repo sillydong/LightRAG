@@ -2376,37 +2376,35 @@ def create_app(args):
         description="Returns all known workspaces discoverable from the working directory and active cache",
     )
     async def list_workspaces(request: Request):
-        """List all available workspaces"""
+        """List all available workspaces.
+
+        Merges three sources in priority order:
+        1. Server default workspace (always included).
+        2. Active/cached workspaces from the in-memory RAG and doc-manager caches.
+        3. All workspaces reported by the storage backend via rag.list_workspaces().
+           This covers database-backed workspaces that survived server restarts.
+        """
         try:
             current = get_workspace_from_request(request, get_default_workspace())
             workspaces: set[str] = set()
 
-            # Always include the server default workspace
+            # 1. Server default workspace
             workspaces.add(args.workspace or "")
 
-            # Include all currently cached (active) workspaces
+            # 2. In-memory cache (already-active workspaces from this server session)
             workspaces.update(rag_cache.keys())
             workspaces.update(doc_manager_cache.keys())
 
-            # For file-based storage: scan working_dir subdirectories
-            # A subdirectory is treated as a workspace if it contains at least
-            # one LightRAG storage file (kv_store_*.json or *.graphml).
-            working_dir = Path(args.working_dir)
-            if working_dir.exists():
-                for entry in working_dir.iterdir():
-                    if not entry.is_dir():
-                        continue
-                    # Validate directory name matches allowed workspace characters
-                    sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", entry.name)
-                    if sanitized != entry.name:
-                        continue
-                    has_storage = (
-                        any(entry.glob("kv_store_*.json"))
-                        or any(entry.glob("*.graphml"))
-                        or any(entry.glob("*.faiss"))
-                    )
-                    if has_storage:
-                        workspaces.add(entry.name)
+            # 3. Storage backend enumeration (works for all backends)
+            try:
+                rag = await create_rag(None)
+                backend_workspaces = await rag.list_workspaces()
+                workspaces.update(backend_workspaces)
+            except Exception as backend_err:
+                logger.warning(
+                    f"list_workspaces: backend enumeration failed, "
+                    f"results may be incomplete: {backend_err}"
+                )
 
             return {
                 "workspaces": sorted(workspaces),
