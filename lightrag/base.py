@@ -174,16 +174,14 @@ class StorageNameSpace(ABC):
     async def list_workspaces(self) -> list[str]:
         """Return all workspace identifiers visible through this storage connection.
 
-        Each implementation queries its own backend for ALL workspace names it can
-        see (not just the current instance's workspace).  Backends that cannot
-        enumerate workspaces (e.g. pure in-memory) return an empty list.
-
-        The API layer merges results from doc_status_storage (primary) and
-        graph_storage (fallback) with the runtime cache.
+        Implementations query their own backend for ALL workspace names accessible
+        via the current connection/config (not just the current instance's workspace).
+        Backends that cannot enumerate workspaces return an empty list.
 
         Returns:
-            Sorted list of workspace strings.  Empty string ``""`` represents the
-            root / default workspace (no explicit workspace name).
+            List of workspace strings.  Implementations should return a sorted list.
+            Empty string ``""`` represents the root / default workspace (no explicit
+            workspace name).  Default implementation returns ``[]``.
         """
         return []
 

@@ -22,3 +22,20 @@ async def test_base_list_workspaces_returns_empty_list():
     )
     result = await storage.list_workspaces()
     assert result == []
+
+
+@pytest.mark.asyncio
+async def test_base_list_workspaces_can_be_overridden():
+    """Verify the method is overridable by concrete implementations."""
+
+    class _OverrideStorage(_ConcreteStorage):
+        async def list_workspaces(self) -> list[str]:
+            return ["ws1", "ws2"]
+
+    storage = _OverrideStorage(
+        namespace="test_ns",
+        workspace="ws1",
+        global_config={},
+    )
+    result = await storage.list_workspaces()
+    assert result == ["ws1", "ws2"]
